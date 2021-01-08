@@ -1,5 +1,5 @@
-# Biological Data Integration
-A WIP integration and normalization layer for life science specific datasets/databases. 
+# Biological Data Integration & Processing
+A WIP integration and normalization layer for life science specific datasets/databases.
 
 ## Biological Databases
 > See [List of biological databases (Wikipedia)](https://en.wikipedia.org/wiki/List_of_biological_databases) for an overview.
