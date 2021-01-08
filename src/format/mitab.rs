@@ -1,9 +1,98 @@
 use std::collections::{HashMap, LinkedList, HashSet};
+use nom::{
+    IResult,
+    bytes::complete::{tag, take_while_m_n},
+    combinator::map_res,
+    sequence::tuple,
+    sequence::delimited,
+    character::complete::char,
+    bytes::complete::is_not,
+    error::ParseError,
+    character::complete::multispace0,
+    combinator::recognize,
+    sequence::pair,
+    branch::alt,
+    character::complete::{alpha1},
+    character::complete::alphanumeric1,
+    combinator::{cut, map, opt},
+    error::{context, VerboseError},
+    multi::{many0, many1},
+    sequence::{preceded, terminated},
+    character::complete::{digit1, multispace1, one_of},
+    multi::separated_list1,
+    multi::many_till,
+    Parser,
+    bytes::complete::take_while1,
+};
+// use crate::parser_utils;
+
+///////////////////////////////////////////////////////////////////////////////
+/// NOM PARSER HELPERS
+///////////////////////////////////////////////////////////////////////////////
+
+
+/// the corresponding PSI-MI controlled vocabulary, and represented as
+/// `dataBaseName:identifier(interactionType)`.
+/// 
+/// E.g. `psi-mi:"MI:0407"(direct interaction)`.
+fn parse_interaction_type(
+    source: &str
+) -> Result<(&str, InteractionType), nom::Err<nom::error::Error<&str>>>
+{
+    use crate::parser_utils::{
+        string::parse_string,
+        string::some_string,
+        identifier,
+        ws,
+        parens,
+    };
+    fn parse_text(
+        source: &str
+    ) -> Result<(&str, String), nom::Err<nom::error::Error<&str>>> {
+        alt((parse_string, identifier))(source)
+    }
+    let (source, db_name) = take_while1(|x| x != ':')(source)?;
+    let (source, _) = char(':')(source)?;
+    let (source, ident) = take_while1(|x| x != '(')(source)?;
+    let (source, _) = char('(')(source)?;
+    let (source, inter_ty) = take_while1(|x| x != ')')(source)?;
+    let finalize = |text: &str| {
+        text.replace("\"", "")
+            .to_owned()
+    };
+    let ast = InteractionType{
+        database_name: finalize(db_name),
+        identifier: finalize(ident),
+        interaction_type: finalize(inter_ty),
+    };
+    Ok((source, ast))
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+/// DATA
+///////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier {
     database_name: String,
     identifier: String,
+}
+
+/// the corresponding PSI-MI controlled vocabulary, and represented as
+/// `dataBaseName:identifier(interactionType)`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InteractionType {
+    database_name: String,
+    identifier: String,
+    interaction_type: String,
+}
+
+impl InteractionType {
+    pub fn from_str(val: &str) -> Option<Self> {
+        parse_interaction_type(val).ok().map(|(_, x)| x)
+    }
 }
 
 impl Identifier {
@@ -77,11 +166,11 @@ pub struct Row {
     /// `Taxid Interactor B`
     taxid_interactor_b: String,
     /// `Interaction Types`
-    interaction_types: HashSet<String>,
+    interaction_types: HashSet<InteractionType>,
     /// `Source Database`
     source_database: String,
     /// `Interaction Identifiers`
-    interaction_identifiers: HashSet<String>,
+    interaction_identifiers: HashSet<Identifier>,
     /// `Confidence Values`
     confidence_values: HashSet<String>,
 }
@@ -115,6 +204,20 @@ fn parse_row(row_text: &str) -> Row {
     let pop_list = |rows: &mut LinkedList<&str>| {
         rows.pop_front().unwrap().split("|").map(|x| x.to_owned()).collect()
     };
+    let pop_list_as_idents = |rows: &mut LinkedList<&str>| {
+        rows.pop_front()
+            .unwrap()
+            .split("|")
+            .map(|x| Identifier::from_str(x).unwrap())
+            .collect()
+    };
+    let pop_list_as_inter_tys = |rows: &mut LinkedList<&str>| {
+        rows.pop_front()
+            .unwrap()
+            .split("|")
+            .map(|x| InteractionType::from_str(x).unwrap())
+            .collect()
+    };
     let id_interactor_a = Identifier::from_str(rows.pop_front().unwrap()).unwrap();
     let id_interactor_b = Identifier::from_str(rows.pop_front().unwrap()).unwrap();
     let alt_ids_interactor_a = pop_list(&mut rows);
@@ -126,9 +229,9 @@ fn parse_row(row_text: &str) -> Row {
     let publication_identifiers = pop_list(&mut rows);
     let taxid_interactor_a = rows.pop_front().unwrap().to_owned();
     let taxid_interactor_b = rows.pop_front().unwrap().to_owned();
-    let interaction_types = pop_list(&mut rows);
+    let interaction_types = pop_list_as_inter_tys(&mut rows);
     let source_database = rows.pop_front().unwrap().to_owned();
-    let interaction_identifiers = pop_list(&mut rows);
+    let interaction_identifiers = pop_list_as_idents(&mut rows);
     let confidence_values = pop_list(&mut rows);
     Row{
         id_interactor_a,
@@ -175,7 +278,7 @@ pub fn parse_ident(ty: &str) -> Option<String> {
     }
 }
 
-pub fn parse_interaction_type(ty: &str) -> Option<String> {
+pub fn as_bel_interaction_type(ty: &str) -> Option<String> {
     match ty {
         // increases
         "psi-mi:\\\"MI:0794\\\"(synthetic genetic interaction defined by inequality)" => {Some(String::from("increases"))}
@@ -193,17 +296,11 @@ pub fn parse_interaction_type(ty: &str) -> Option<String> {
 
 
 pub fn main() {
-    let source_file = "source.txt";
     let source_file = "data/biogrid/BIOGRID-ALL-4.2.193.mitab.txt";
+    let source_file = "source.txt";
     let mut rows = parse_file(source_file);
-    let mut idents = HashSet::new();
-    for row in rows {
-        idents.insert(row.id_interactor_a.database_name.clone());
-        if row.id_interactor_a.database_name.as_str() == "biogrid" {
-            println!("\t{:?}", row.id_interactor_a);
-        }
-    }
-    println!("\n");
-    println!("{:?}", idents);
+    println!("{:#?}", rows.pop());
+    println!("{:#?}", rows.pop());
+    println!("{:#?}", rows.pop());
 }
 

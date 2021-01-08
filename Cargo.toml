@@ -11,3 +11,4 @@ repository = "https://github.com/colbyn/bio-data"
 license = "MIT"
 
 [dependencies]
+nom = "6.0.1"
