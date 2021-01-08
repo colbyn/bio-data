@@ -1,0 +1,13 @@
+[package]
+name = "bio-data"
+version = "0.1.0"
+authors = ["Colbyn Wadman <hello@colbyn.com>"]
+edition = "2018"
+description = "A WIP integration layer for datasets in the life sciences."
+categories = ["science", "parser-implementations"]
+keywords = ["biology", "science", "data"]
+homepage = "https://github.com/colbyn/bio-data"
+repository = "https://github.com/colbyn/bio-data"
+license = "MIT"
+
+[dependencies]
